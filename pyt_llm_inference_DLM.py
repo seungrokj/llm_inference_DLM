@@ -1,4 +1,3 @@
-#python ../ibench_hf_mod.py --model llama2-70b-chat --model_path=TheBloke/Llama-2-7B-Chat-fp16 --platform=MI250 --n 10 --batch_size=1 --prompt_len=512 --new_tokens=512 --profiling
 import torch
 import time
 import math
