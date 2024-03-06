@@ -2,6 +2,7 @@ import torch
 import time
 import math
 import os
+import csv
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from argparse import ArgumentParser
@@ -52,21 +53,18 @@ def main():
     )
     parser.add_argument(
         "--batch_size_list",
-        #type=list,
         nargs='*',
         default=[1, 16, 32],
         help="Batch size"
     )
     parser.add_argument(
         "--prompt_len_list",
-        #type=list,
         nargs='*',
         default=[128, 512],
         help="Input prompt length"
     )
     parser.add_argument(
         "--new_tokens_list",
-        #type=list,
         nargs='*',
         default=[128],
         help="Max new token length"
@@ -82,7 +80,12 @@ def main():
         choices=["sdpa", "flash_attention_2", "eager"],
         type=str,
         default="sdpa",
-        help="DeepSpeed Flops Profiler Profiling"
+        help="Flash attention implementation"
+    )
+    parser.add_argument(
+        "--csv_out",
+        type=str,
+        help="Csv file out"
     )
 
     args = parser.parse_args()
@@ -110,70 +113,74 @@ def main():
 
     inputs = [input_sample()]
 
-    for b in args.batch_size_list:
-        b = int(b)
-        for sl in args.prompt_len_list:
-            sl = int(sl)
-            inputs = [input_sample()]
-            input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
-            tokens = input_ids["input_ids"][0][0:sl]
-            input_sentences = tokenizer.batch_decode([tokens], skip_special_tokens=True)
+    with open(args.csv_out, mode='w') as csv_latency:
+        csv_latency.write("model,performance,metric\n")
+        for b in args.batch_size_list:
+            b = int(b)
+            for sl in args.prompt_len_list:
+                sl = int(sl)
+                inputs = [input_sample()]
+                input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
+                tokens = input_ids["input_ids"][0][0:sl]
+                input_sentences = tokenizer.batch_decode([tokens], skip_special_tokens=True)
 
-            if b > len(input_sentences):
-                input_sentences *= math.ceil(b / len(input_sentences))
-            inputs = input_sentences[:b]
-            input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
+                if b > len(input_sentences):
+                    input_sentences *= math.ceil(b / len(input_sentences))
+                inputs = input_sentences[:b]
+                input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
 
-            for t in input_ids:
-                if torch.is_tensor(input_ids[t]):
-                    input_ids[t] = input_ids[t].cuda()
+                for t in input_ids:
+                    if torch.is_tensor(input_ids[t]):
+                        input_ids[t] = input_ids[t].cuda()
 
-            for v in args.new_tokens_list:
-                v = int(v)
-                P_latency = []
-                D_latency = []
-                for itr in range(args.iters):
-                    with torch.no_grad():
-                        # Prefill
-                        start_event = torch.cuda.Event(enable_timing=True)
-                        end_event = torch.cuda.Event(enable_timing=True)
-                        torch.cuda.synchronize()
+                for v in args.new_tokens_list:
+                    v = int(v)
+                    P_latency = []
+                    D_latency = []
+                    for itr in range(args.iters):
+                        with torch.no_grad():
+                            # Prefill
+                            start_event = torch.cuda.Event(enable_timing=True)
+                            end_event = torch.cuda.Event(enable_timing=True)
+                            torch.cuda.synchronize()
 
-                        start_event.record()
-                        output_ids = llm_gen_tokens(model, 1, input_ids, tokenizer)
+                            start_event.record()
+                            output_ids = llm_gen_tokens(model, 1, input_ids, tokenizer)
 
-                        end_event.record()
+                            end_event.record()
 
-                        torch.cuda.synchronize()
-                        P_latency.append(start_event.elapsed_time(end_event))
+                            torch.cuda.synchronize()
+                            P_latency.append(start_event.elapsed_time(end_event))
 
-                        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-                        # Output decoding 
-                        start_event = torch.cuda.Event(enable_timing=True)
-                        end_event = torch.cuda.Event(enable_timing=True)
-                        torch.cuda.synchronize()
+                            outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+                            # Output decoding 
+                            start_event = torch.cuda.Event(enable_timing=True)
+                            end_event = torch.cuda.Event(enable_timing=True)
+                            torch.cuda.synchronize()
 
-                        start_event.record()
-                        output_ids = llm_gen_tokens(model, v, input_ids, tokenizer)
+                            start_event.record()
+                            output_ids = llm_gen_tokens(model, v, input_ids, tokenizer)
 
-                        end_event.record()
+                            end_event.record()
 
-                        torch.cuda.synchronize()
-                        D_latency.append(start_event.elapsed_time(end_event))
+                            torch.cuda.synchronize()
+                            D_latency.append(start_event.elapsed_time(end_event))
 
-                        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+                            outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
-                P_latency.sort()
-                D_latency.sort()
-                outlier_samples = math.ceil(len(P_latency)/100*(100-outlier_percent))
-                P_latency = P_latency[:outlier_samples]
-                D_latency = D_latency[:outlier_samples]
-                P_latency_avg = sum(P_latency) / len(P_latency) 
-                D_latency_avg_per_tkn = (sum(D_latency)/ len(D_latency) - P_latency_avg) / (v - 1)
-
-                print("\n")
-                print("TTFT batch_size {}, prompt_len {}, new_tokens {}: {} (ms)".format(b, sl, v, P_latency_avg))
-                print("TPOT batch_size {}, prompt_len {}, new_tokens {}: {} (ms)".format(b, sl, v, D_latency_avg_per_tkn))
+                    P_latency.sort()
+                    D_latency.sort()
+                    outlier_samples = math.ceil(len(P_latency)/100*(100-outlier_percent))
+                    P_latency = P_latency[:outlier_samples]
+                    D_latency = D_latency[:outlier_samples]
+                    P_latency_avg = sum(P_latency) / len(P_latency) 
+                    D_latency_avg_per_tkn = (sum(D_latency)/ len(D_latency) - P_latency_avg) / (v - 1)
+                    prefill_csv  = args.model_path+","+str(P_latency_avg)+", PREFILL  batch_size "+str(b)+" prompt_len "+str(sl)+" new_tokens "+str(v)+"\n"
+                    decoding_csv = args.model_path+","+str(D_latency_avg_per_tkn)+", DECODING batch_size "+str(b)+" prompt_len "+str(sl)+" new_tokens "+str(v)+"\n"
+                    print(prefill_csv)
+                    print(decoding_csv)
+                    csv_latency.write(prefill_csv)
+                    csv_latency.write(decoding_csv)
 
                 if args.show_tokens == True:
                     print("inputs")
