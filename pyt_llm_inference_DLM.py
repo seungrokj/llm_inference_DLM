@@ -104,7 +104,10 @@ def main():
         #dtype = float8e5m2fnuz
 
     if args.platform == "MI210":
-        model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+        try:
+            model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+        except:
+            model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
     else: 
         # TODO: mGPUs + manual_device_map
         pass
