@@ -120,7 +120,7 @@ def main():
     try:
         tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
     except:
-        if args.model_path = "google/flan-t5-xxl":
+        if args.model_path == "google/flan-t5-xxl":
             from transformers import T5Tokenizer
             tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
         else:
