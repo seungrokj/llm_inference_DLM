@@ -105,6 +105,15 @@ def main():
 
     if args.platform == "MI210":
         try:
+            tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+        except:
+            if args.model_path == "google/flan-t5-xxl":
+                from transformers import T5Tokenizer
+                tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+            else:
+                raise RuntimeError("Tokenizer is not found")
+                
+        try:
             model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         except:
             if args.model_path == "google/flan-t5-xxl":
@@ -117,14 +126,6 @@ def main():
         # TODO: mGPUs + manual_device_map
         pass
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
-    except:
-        if args.model_path == "google/flan-t5-xxl":
-            from transformers import T5Tokenizer
-            tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
-        else:
-            pass
 
     inputs = [input_sample()]
 
