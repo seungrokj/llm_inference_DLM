@@ -112,7 +112,7 @@ def main():
         # TODO: mGPUs + manual_device_map
         pass
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", use_fast=False)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
 
     inputs = [input_sample()]
 
