@@ -120,7 +120,7 @@ def main():
                 dtype=torch.float32
                 from transformers import T5ForConditionalGeneration
                 model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
-            elif args.model_path == "tiiuae/falcon-7b":
+            elif args.model_path == "tiiuae/falcon-7b-instruct":
                 dtype=torch.bfloat16
                 model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
             else:
