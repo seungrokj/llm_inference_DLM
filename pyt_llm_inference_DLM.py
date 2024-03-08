@@ -107,12 +107,20 @@ def main():
         try:
             model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         except:
-            model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+            try:
+                model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+            except:
+                from transformers import T5ForConditionalGeneration
+                model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
     else: 
         # TODO: mGPUs + manual_device_map
         pass
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+    except:
+        from transformers import T5Tokenizer
+        tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
 
     inputs = [input_sample()]
 
