@@ -107,7 +107,7 @@ def main():
         try:
             model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         except:
-            if args.model_path = "google/flan-t5-xxl":
+            if args.model_path == "google/flan-t5-xxl":
                 dtype=torch.float32
                 from transformers import T5ForConditionalGeneration
                 model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
