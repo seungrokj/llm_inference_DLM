@@ -93,9 +93,9 @@ def main():
     if args.precision == "float16":
         dtype = torch.float16
     elif args.precision == "bfloat16":
-        dtype = torch.float16
+        dtype = torch.bfloat16
     elif args.precision == "float32":
-        dtype = torch.float16
+        dtype = torch.float32
     elif args.precision == "float8":
         # TODO: double check f8 type of MI300
         dtype = float8e5m2
@@ -107,11 +107,12 @@ def main():
         try:
             model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         except:
-            try:
-                model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
-            except:
+            if args.model_path = "google/flan-t5-xxl":
+                dtype=torch.float32
                 from transformers import T5ForConditionalGeneration
                 model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+            else:
+                model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
     else: 
         # TODO: mGPUs + manual_device_map
         pass
@@ -119,8 +120,11 @@ def main():
     try:
         tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
     except:
-        from transformers import T5Tokenizer
-        tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+        if args.model_path = "google/flan-t5-xxl":
+            from transformers import T5Tokenizer
+            tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
+        else:
+            pass
 
     inputs = [input_sample()]
 
