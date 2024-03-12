@@ -161,7 +161,7 @@ def main():
                     model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         elif backend == "vllm":
 
-            if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1": 
+            if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1" or args.model_path == "mistralai/Mistral-7B-Instruct-v0.2": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
             else:
                 max_num_batched_tokens = 8192 
