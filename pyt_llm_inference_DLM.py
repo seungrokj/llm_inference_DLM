@@ -11,7 +11,8 @@ from prompt_sample import input_sample
 # ======== Hard-coded, Start
 cache = True
 outlier_percent = 30
-max_num_batched_tokens = 4096 # vllm
+#max_num_batched_tokens = 4096 # vllm
+max_num_batched_tokens = 8192 # vllm
 gpu_memory_utilization = 0.8 # vllm
 # ======== Hard-coded, End
 
@@ -146,27 +147,8 @@ def main():
                 tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
             else:
                 raise RuntimeError("Tokenizer is not found")
-        if backend == "vllm":
-            model = LLM(
-                model=args.model_path,
-                tokenizer=args.model_path,
-                tensor_parallel_size=1,
-                #max_num_seqs=1, #TODO
-                #max_num_batched_tokens=1 * 128, #TODO
-                #max_num_batched_tokens=200,
-                max_num_batched_tokens = max_num_batched_tokens,
-                trust_remote_code=True,
-                gpu_memory_utilization = gpu_memory_utilization,
-                )
-            tokenizer = AutoTokenizer.from_pretrained(args.model_path, use_fast=False)
 
-        elif backend == "gptq":
-            raise RuntimeError(f"{backend} is not implemented")
-        elif backend == "awq":
-            raise RuntimeError(f"{backend} is not implemented")
-        elif backend == "tgi":
-            raise RuntimeError(f"{backend} is not implemented")
-        else:
+        if backend == "pyt":
             try:
                 model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
             except:
@@ -179,6 +161,25 @@ def main():
                     model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
                 else:
                     model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+        elif backend == "vllm":
+            model = LLM(
+                model=args.model_path,
+                tokenizer=args.model_path,
+                tensor_parallel_size=1,
+                #max_num_seqs=1, #TODO
+                #max_num_batched_tokens=1 * 128, #TODO
+                #max_num_batched_tokens=200,
+                max_num_batched_tokens = max_num_batched_tokens,
+                trust_remote_code=True,
+                gpu_memory_utilization = gpu_memory_utilization,
+                )
+
+        elif backend == "gptq":
+            raise RuntimeError(f"{backend} is not implemented")
+        elif backend == "awq":
+            raise RuntimeError(f"{backend} is not implemented")
+        elif backend == "tgi":
+            raise RuntimeError(f"{backend} is not implemented")
     else: 
         # TODO: mGPUs + manual_device_map
         pass
