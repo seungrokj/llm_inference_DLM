@@ -163,6 +163,8 @@ def main():
 
             if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1" or args.model_path == "mistralai/Mistral-7B-Instruct-v0.2": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
+            elif args.model_path == "codellama/CodeLlama-7b-Instruct-hf": 
+                max_num_batched_tokens = 16384
             else:
                 max_num_batched_tokens = 8192 
             model = LLM(
