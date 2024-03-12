@@ -11,8 +11,6 @@ from prompt_sample import input_sample
 # ======== Hard-coded, Start
 cache = True
 outlier_percent = 30
-#max_num_batched_tokens = 4096 # vllm
-max_num_batched_tokens = 8192 # vllm
 gpu_memory_utilization = 0.8 # vllm
 # ======== Hard-coded, End
 
@@ -165,7 +163,8 @@ def main():
 
             if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
-
+            else
+                max_num_batched_tokens = 8192 
             model = LLM(
                 model=args.model_path,
                 tokenizer=args.model_path,
