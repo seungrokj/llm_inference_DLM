@@ -11,16 +11,32 @@ from prompt_sample import input_sample
 # ======== Hard-coded, Start
 cache = True
 outlier_percent = 30
+max_num_batched_tokens = 4096 # vllm
+gpu_memory_utilization = 0.8 # vllm
 # ======== Hard-coded, End
 
-def llm_gen_tokens(model, max_length, input_ids, tokenizer):
-    return model.generate(
-        **input_ids,
-        min_new_tokens=max_length,
-        max_new_tokens=max_length,
-        use_cache=cache,
-        pad_token_id=tokenizer.eos_token_id
-    )
+def llm_gen_tokens(model, max_length, input_ids, tokenizer, backend, sampling_params):
+    if backend == "pyt":
+        return model.generate(
+            **input_ids,
+            min_new_tokens=max_length,
+            max_new_tokens=max_length,
+            use_cache=cache,
+            pad_token_id=tokenizer.eos_token_id
+            )
+    elif backend == "vllm":
+        return model.generate(
+            prompts=None,
+            sampling_params=sampling_params,
+            prompt_token_ids=input_ids,
+            use_tqdm=False,
+            ) 
+    elif backend == "gptq":
+        raise RuntimeError(f"{backend} is not implemented")
+    elif backend == "awq":
+        raise RuntimeError(f"{backend} is not implemented")
+    elif backend == "tgi":
+        raise RuntimeError(f"{backend} is not implemented")
 
 def main():
     parser = ArgumentParser(description="LLM Inference Benchmark Example")
@@ -87,8 +103,26 @@ def main():
         type=str,
         help="Csv file out"
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["pyt", "vllm", "gptq", "awq", "tgi"],
+        help="LLM backend"
+    )
 
     args = parser.parse_args()
+
+    backend = args.backend
+    if backend == "vllm":
+        from vllm import LLM
+        from vllm.sampling_params import SamplingParams
+        from vllm.transformers_utils.config import get_config
+    elif backend == "gptq":
+        raise RuntimeError(f"{backend} is not implemented")
+    elif backend == "awq":
+        raise RuntimeError(f"{backend} is not implemented")
+    elif backend == "tgi":
+        raise RuntimeError(f"{backend} is not implemented")
 
     if args.precision == "float16":
         dtype = torch.float16
@@ -112,23 +146,42 @@ def main():
                 tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
             else:
                 raise RuntimeError("Tokenizer is not found")
-                
-        try:
-            model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
-        except:
-            if args.model_path == "google/flan-t5-xxl":
-                dtype=torch.float32
-                from transformers import T5ForConditionalGeneration
-                model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
-            elif args.model_path == "tiiuae/falcon-7b-instruct":
-                dtype=torch.bfloat16
-                model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
-            else:
-                model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+        if backend == "vllm":
+            model = LLM(
+                model=args.model_path,
+                tokenizer=args.model_path,
+                tensor_parallel_size=1,
+                #max_num_seqs=1, #TODO
+                #max_num_batched_tokens=1 * 128, #TODO
+                #max_num_batched_tokens=200,
+                max_num_batched_tokens = max_num_batched_tokens,
+                trust_remote_code=True,
+                gpu_memory_utilization = gpu_memory_utilization,
+                )
+            tokenizer = AutoTokenizer.from_pretrained(args.model_path, use_fast=False)
+
+        elif backend == "gptq":
+            raise RuntimeError(f"{backend} is not implemented")
+        elif backend == "awq":
+            raise RuntimeError(f"{backend} is not implemented")
+        elif backend == "tgi":
+            raise RuntimeError(f"{backend} is not implemented")
+        else:
+            try:
+                model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+            except:
+                if args.model_path == "google/flan-t5-xxl":
+                    dtype=torch.float32
+                    from transformers import T5ForConditionalGeneration
+                    model = T5ForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+                elif args.model_path == "tiiuae/falcon-7b-instruct":
+                    dtype=torch.bfloat16
+                    model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+                else:
+                    model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
     else: 
         # TODO: mGPUs + manual_device_map
         pass
-
 
     inputs = [input_sample()]
 
@@ -147,10 +200,12 @@ def main():
                     input_sentences *= math.ceil(b / len(input_sentences))
                 inputs = input_sentences[:b]
                 input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
-
-                for t in input_ids:
-                    if torch.is_tensor(input_ids[t]):
-                        input_ids[t] = input_ids[t].cuda()
+                if backend == "pyt":
+                    for t in input_ids:
+                        if torch.is_tensor(input_ids[t]):
+                            input_ids[t] = input_ids[t].cuda()
+                elif backend == "vllm":
+                    input_ids = input_ids["input_ids"].tolist()
 
                 for v in args.new_tokens_list:
                     v = int(v)
@@ -159,39 +214,48 @@ def main():
                     for itr in range(args.iters):
                         with torch.no_grad():
                             # Prefill
+                            if backend == "vllm":
+                                sampling_params = SamplingParams(temperature=0, max_tokens=1)
+                            else:
+                                sampling_params = ""
                             start_event = torch.cuda.Event(enable_timing=True)
                             end_event = torch.cuda.Event(enable_timing=True)
                             torch.cuda.synchronize()
 
                             start_event.record()
-                            output_ids = llm_gen_tokens(model, 1, input_ids, tokenizer)
+                            output_ids = llm_gen_tokens(model, 1, input_ids, tokenizer, backend, sampling_params)
 
                             end_event.record()
 
                             torch.cuda.synchronize()
                             P_latency.append(start_event.elapsed_time(end_event))
 
-                            outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
                             # Output decoding 
+                            if backend == "vllm":
+                                sampling_params = SamplingParams(temperature=0, max_tokens=v)
+                            else:
+                                sampling_params = ""
                             start_event = torch.cuda.Event(enable_timing=True)
                             end_event = torch.cuda.Event(enable_timing=True)
                             torch.cuda.synchronize()
 
                             start_event.record()
-                            output_ids = llm_gen_tokens(model, v, input_ids, tokenizer)
+                            output_ids = llm_gen_tokens(model, v, input_ids, tokenizer, backend, sampling_params)
 
                             end_event.record()
 
                             torch.cuda.synchronize()
                             D_latency.append(start_event.elapsed_time(end_event))
 
-                            outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+                            if backend == "pyt":
+                                outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
                     P_latency.sort()
                     D_latency.sort()
                     outlier_samples = math.ceil(len(P_latency)/100*(100-outlier_percent))
                     P_latency = P_latency[:outlier_samples]
                     D_latency = D_latency[:outlier_samples]
+
                     P_latency_avg = sum(P_latency) / len(P_latency) 
                     D_latency_avg_per_tkn = (sum(D_latency)/ len(D_latency) - P_latency_avg) / (v - 1)
                     prefill_csv  = args.model_path+","+str(P_latency_avg)+", PREFILL  batch_size "+str(b)+" prompt_len "+str(sl)+" new_tokens "+str(v)+"\n"
@@ -206,8 +270,12 @@ def main():
                     print(input_ids)
                     print(inputs)
                     print("outputs")
-                    print(output_ids)
-                    print(outputs)
+                    if backend == "pyt":
+                        print(output_ids)
+                        print(outputs)
+                    elif backend == "vllm":
+                        for out in range(len(output_ids)):
+                            print(output_ids[out].outputs[0].text)
 
 if __name__ == "__main__":
     main()
