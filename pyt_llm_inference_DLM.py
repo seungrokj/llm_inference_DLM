@@ -137,6 +137,7 @@ def main():
         #dtype = float8e5m2fnuz
 
     if args.platform == "MI210":
+        # tokenizer
         try:
             tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
         except:
@@ -145,7 +146,7 @@ def main():
                 tokenizer = T5Tokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
             else:
                 raise RuntimeError("Tokenizer is not found")
-
+        # model
         if backend == "pyt":
             try:
                 model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
@@ -161,12 +162,16 @@ def main():
                     model = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
         elif backend == "vllm":
 
-            if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1" or args.model_path == "mistralai/Mistral-7B-Instruct-v0.2": 
+            if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1": 
+                max_num_batched_tokens = 32768 # vllm, mixtral moe exception
+                global gpu_memory_utilization = 0.4 # vllm
+            elif args.model_path == args.model_path == "mistralai/Mistral-7B-Instruct-v0.2": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
             elif args.model_path == "codellama/CodeLlama-7b-Instruct-hf": 
                 max_num_batched_tokens = 16384
             else:
                 max_num_batched_tokens = 8192 
+
             model = LLM(
                 model=args.model_path,
                 tokenizer=args.model_path,
