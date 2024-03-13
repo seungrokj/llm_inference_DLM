@@ -164,7 +164,8 @@ def main():
 
             if args.model_path == "mistralai/Mixtral-8x7B-Instruct-v0.1": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
-                global gpu_memory_utilization = 0.4 # vllm
+                global gpu_memory_utilization
+                gpu_memory_utilization = 0.4 # workaround to prevent oom
             elif args.model_path == args.model_path == "mistralai/Mistral-7B-Instruct-v0.2": 
                 max_num_batched_tokens = 32768 # vllm, mixtral moe exception
             elif args.model_path == "codellama/CodeLlama-7b-Instruct-hf": 
