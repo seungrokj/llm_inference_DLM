@@ -136,7 +136,7 @@ def main():
         #dtype = float8e4m3fn
         #dtype = float8e5m2fnuz
 
-    if args.platform == "MI210":
+    if args.platform == "MI210" or args.platform == "MI300" :
         # tokenizer
         try:
             tokenizer = AutoTokenizer.from_pretrained(args.model_path, padding_side="left", trust_remote_code=True, uese_fast=False)
