@@ -15,7 +15,7 @@ gpu_memory_utilization = 0.8 # vllm
 # ======== Hard-coded, End
 
 def llm_gen_tokens(model, max_length, input_ids, tokenizer, backend, sampling_params):
-    if backend == "pyt":
+    if backend == "pyt" or backend == "gptq":
         return model.generate(
             **input_ids,
             min_new_tokens=max_length,
@@ -109,15 +109,45 @@ def main():
         help="LLM backend"
     )
 
+    parser.add_argument(
+        "--quant_kernel",
+        type=str,
+        choices=["cuda", "exllamav1", "exllamav2"],
+        help="GPTQ/AWQ kernel"
+    )
+
     args = parser.parse_args()
 
     backend = args.backend
+    quant_kernel = args.quant_kernel
     if backend == "vllm":
         from vllm import LLM
         from vllm.sampling_params import SamplingParams
         from vllm.transformers_utils.config import get_config
     elif backend == "gptq":
-        raise RuntimeError(f"{backend} is not implemented")
+        from transformers import GPTQConfig
+        if quant_kernel == "cuda":
+            q_config = GPTQConfig(
+                                 bits=4,
+                                 group_size=128,
+                                 use_exllama=False,
+                                )
+        elif quant_kernel == "exllamav1":
+            q_config = GPTQConfig(
+                                 bits=4,
+                                 group_size=128,
+                                 use_exllama=True,
+                                 exllama_config={"version":1},
+                                )
+        elif quant_kernel == "exllamav2":
+            q_config = GPTQConfig(
+                                 bits=4,
+                                 group_size=128,
+                                 use_exllama=True,
+                                 exllama_config={"version":2},
+                                )
+        else:
+            raise RuntimeError(f"{quant_kernel} is not implemented")
     elif backend == "awq":
         raise RuntimeError(f"{backend} is not implemented")
     elif backend == "tgi":
@@ -150,6 +180,7 @@ def main():
         if backend == "pyt":
             try:
                 model = AutoModelForCausalLM.from_pretrained(args.model_path, attn_implementation=args.attn_implementation, torch_dtype=dtype, trust_remote_code=True, device_map="auto")
+                model = torch.compile(model)
             except:
                 if args.model_path == "google/flan-t5-xxl":
                     dtype=torch.float32
@@ -186,7 +217,11 @@ def main():
                 )
 
         elif backend == "gptq":
-            raise RuntimeError(f"{backend} is not implemented")
+            model = AutoModelForCausalLM.from_pretrained(args.model_path,
+                                                         device_map="auto",
+                                                         trust_remote_code=True,
+                                                         quantization_config=q_config,
+                                                         revision="main")
         elif backend == "awq":
             raise RuntimeError(f"{backend} is not implemented")
         elif backend == "tgi":
@@ -212,7 +247,7 @@ def main():
                     input_sentences *= math.ceil(b / len(input_sentences))
                 inputs = input_sentences[:b]
                 input_ids = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=False)
-                if backend == "pyt":
+                if backend == "pyt" or backend == "gptq":
                     for t in input_ids:
                         if torch.is_tensor(input_ids[t]):
                             input_ids[t] = input_ids[t].cuda()
@@ -259,7 +294,7 @@ def main():
                             torch.cuda.synchronize()
                             D_latency.append(start_event.elapsed_time(end_event))
 
-                            if backend == "pyt":
+                            if backend == "pyt" or backend == "gptq":
                                 outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
                     P_latency.sort()
