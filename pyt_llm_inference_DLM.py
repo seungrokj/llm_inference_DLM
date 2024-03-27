@@ -30,8 +30,6 @@ def llm_gen_tokens(model, max_length, input_ids, tokenizer, backend, sampling_pa
             prompt_token_ids=input_ids,
             use_tqdm=False,
             ) 
-    elif backend == "gptq":
-        raise RuntimeError(f"{backend} is not implemented")
     elif backend == "awq":
         raise RuntimeError(f"{backend} is not implemented")
     elif backend == "tgi":
@@ -317,7 +315,7 @@ def main():
                     print(input_ids)
                     print(inputs)
                     print("outputs")
-                    if backend == "pyt":
+                    if backend == "pyt" or backend == "gptq":
                         print(output_ids)
                         print(outputs)
                     elif backend == "vllm":
