@@ -244,7 +244,7 @@ def main():
 
                             # Output decoding 
                             if backend == "vllm":
-                                sampling_params = SamplingParams(temperature=0, max_tokens=v)
+                                sampling_params = SamplingParams(temperature=0, max_tokens=v, ignore_eos=True)
                             else:
                                 sampling_params = ""
                             start_event = torch.cuda.Event(enable_timing=True)
